@@ -1,6 +1,5 @@
 import UnityEngine
 import clojure.lang
-#import ucccore
 
 class ClojureTest (MonoBehaviour):
   private input_rect as Rect
@@ -16,8 +15,6 @@ class ClojureTest (MonoBehaviour):
 
   private myeval_fn as IFn
   private pr_str as IFn
-
-  static private current_obj as ClojureTest
 
   # TODO: 余裕があれば、input欄の横にclear/submitボタンもつける
 
@@ -111,7 +108,6 @@ class ClojureTest (MonoBehaviour):
   def Start():
     guiSkin = Resources.Load("skin", typeof(GUISkin))
     refresh_screen()
-    current_obj = self
 
     # Clojure init
     try:
@@ -122,7 +118,7 @@ class ClojureTest (MonoBehaviour):
       append_log("使い方：")
       append_log("下欄にClojure式を入力してリターンキーを押すと評価されます。")
       append_log("(一行で入力する必要があります。)")
-      append_log("※現在のところ、多値入力に対応していません。")
+      append_log("※現在のところ、多値入力に対応していません。式は一個ずつ入力してください。")
       append_log("※現在のところ、 *ns* を user 以外に変更できません。")
       append_log("※現在のところ、ヒストリ補完機能がありません。")
       append_log("　上欄からコピペする事は一応可能です。")
@@ -134,14 +130,6 @@ class ClojureTest (MonoBehaviour):
       append_log("(set! (.rotateSpeed cube-rotator) (Vector3. 10 10 10))")
     except e:
       append_log(e.ToString())
-
-  # (import 'ClojureTest) してから
-  # (ClojureTest/Test) で実行できる。
-  # これを応用して、なんか3Dオブジェクトをうごかすデモを用意する
-  # (直にUnityEngineモジュールを叩いたりする)
-  # どういうのがいいか考えておく事。
-  static public def Test():
-    current_obj.append_log("testtesttest")
 
   def Update():
     event_done = false
@@ -157,6 +145,8 @@ class ClojureTest (MonoBehaviour):
     # TODO: ↑↓キーでのヒストリ呼び出しもほしい
     if not event_done and Event.current.isKey and Event.current.keyCode == KeyCode.Return:
       append_log("> " + input_buf)
+      # TODO: ここで多値入力に対応させたい
+      #       (多値入力に対応したら、空文字列判定も不要になる)
       if input_buf != "":
         try:
           result = readeval(input_buf)
