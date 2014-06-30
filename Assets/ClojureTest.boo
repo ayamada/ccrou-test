@@ -56,7 +56,7 @@ class ClojureTest (MonoBehaviour):
   private def clojure_init():
     myeval_script = """
     ;; TODO: eval実行後の *ns* をどこかに記録しておき、再利用できるようにする
-    (fn [source]
+    (fn [source & [multi? stringify?]]
       (binding [*ns* *ns*
                 *warn-on-reflection* *warn-on-reflection*
                 *math-context* *math-context*
@@ -74,26 +74,25 @@ class ClojureTest (MonoBehaviour):
                 *3 nil
                 *e nil]
         (in-ns 'user)
-        (eval (read-string source))
-        ;; TODO: 多値対応させたい。しかし受け側にも対応が必要なのでめんどい。
-        ;;       しかしコピペで複数行貼ると多値入力扱いになるので必須！
-        ;;       どうにかする事。
-        ;(with-in-str source
-        ;  (loop [acc []]
-        ;    (let [ie (read *in* false ::eof)]
-        ;      (if (= ie ::eof)
-        ;        acc
-        ;        (recur (conj acc (eval ie)))))))
-        ))
+        (let [post-processor (if stringify? pr-str identity)]
+          (if-not multi?
+            (post-processor (eval (read-string source)))
+            (object-array
+              (with-in-str source
+                (loop [acc []]
+                  (let [ie (read *in* false ::eof)]
+                    (if (= ie ::eof)
+                      acc
+                      (let [result (try
+                                     (post-processor (eval ie))
+                                     (catch Object e
+                                       (.ToString e)))]
+                        (recur (conj acc result))))))))))))
     """
     read_string as IFn = RT.var('clojure.core', 'read-string')
     eval as IFn = RT.var('clojure.core', 'eval')
     myeval_ie = read_string.invoke(myeval_script)
     myeval_fn = eval.invoke(myeval_ie)
-    pr_str = RT.var('clojure.core', 'pr-str')
-
-  private def readeval(edn as string):
-    return myeval_fn.invoke(edn)
 
   #def Awake():
   #  pass
@@ -104,6 +103,9 @@ class ClojureTest (MonoBehaviour):
     reset_logs_max()
     old_screen.x = Screen.width
     old_screen.y = Screen.height
+
+  private def readeval(edn as string):
+    return myeval_fn.invoke(edn)
 
   def Start():
     guiSkin = Resources.Load("skin", typeof(GUISkin))
@@ -116,11 +118,11 @@ class ClojureTest (MonoBehaviour):
       append_log("*** ClojureCLR REPL on Unity - test ***")
       append_log("ClojureCLR-" + readeval("(clojure-version)"))
       append_log("使い方：")
-      append_log("下欄にClojure式を入力してリターンキーを押すと評価されます(一行で入力する必要があります)。")
-      append_log("※現在のところ、多値入力に対応していません。式は一個ずつ入力してください。")
+      append_log("下欄にClojure式を入力してリターンキーを押すと評価されます。")
       append_log("※現在のところ、 *ns* を user 以外に変更できません。")
-      append_log("※現在のところ、ヒストリ補完機能がありません。上欄からコピペする事は一応可能です。")
-      append_log("※長い行は、上欄内にてカーソル移動させて見る事ができます(分かりづらくてすいません)。")
+      append_log("※現在のところ、ヒストリ補完機能がありません。上欄からコピペする事は可能です。")
+      append_log("※長い行は、上欄内にてカーソル移動させて見る事ができます。")
+      append_log("")
       append_log("背景のオブジェクトは以下のような感じでいじれます。")
       append_log("(import 'CubeRotator)")
       append_log("(def ^CubeRotator cube-rotator (.. GameObject (Find \"CubeRotator\") (GetComponent \"CubeRotator\")))")
@@ -142,15 +144,10 @@ class ClojureTest (MonoBehaviour):
     # TODO: ↑↓キーでのヒストリ呼び出しもほしい
     if not event_done and Event.current.isKey and Event.current.keyCode == KeyCode.Return:
       append_log("> " + input_buf)
-      # TODO: ここで多値入力に対応させたい
-      #       (多値入力に対応したら、空文字列判定も不要になる)
-      if input_buf != "":
-        try:
-          result = readeval(input_buf)
-          append_log(pr_str.invoke(result))
-        except e:
-          append_log("ERROR: " + e.ToString())
-        input_buf = ""
+      results = myeval_fn.invoke(input_buf, true, true)
+      for result in results:
+        append_log(result)
+      input_buf = ""
       event_done = true
     GUI.TextArea(log_rect, log_buf, 'box')
 
